@@ -1,39 +1,45 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const socialMedaiSchema = mongoose.Schema({
+const socialMedaiSchema = mongoose.Schema(
+  {
     email: {
-        type: String,
-        required: true,
-        unique: true,
-        lowercase: true,
-        match: /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      match: /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
     },
     google_id: {
-        type: String,
+      type: String,
     },
     facebook_id: {
-        type: String,
+      type: String,
     },
     password: {
-        type: String,
-        required: true,
+      type: String,
+      required: true,
     },
     userName: {
-        type: String
+      type: String,
     },
     gender: {
-        type: String,
-        enum: ['male', 'female']
+      type: String,
+      enum: ["male", "female"],
+    },
+    loginType: {
+      type: String,
+      enum: ["normal", "google", "facebook"],
+      required: true,
     },
     isDelete: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
-},
-{
-    versionKey : false,
-    timestamps: true
-});
+  },
+  {
+    versionKey: false,
+    timestamps: true,
+  }
+);
 
-module.exports = mongoose.model('Social-Media', socialMedaiSchema);
-
+module.exports = mongoose.model("Social-Media", socialMedaiSchema);
