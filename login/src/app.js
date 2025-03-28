@@ -2,8 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
-// const userRoutes = require('./routes/user.routes');
-const socialMediaRoutes = require('./routes/socialMedia.routes');
+const userRoutes = require('./routes/index.routes');
 
 dotenv.config();
 
@@ -12,8 +11,8 @@ const port = process.env.PORT || 5000;
 
 app.use(express.json());
 app.use(morgan('dev'));
-// app.use('/api', userRoutes);
-app.use('/api', socialMediaRoutes);
+
+app.use('/api', userRoutes);
 
 app.listen(port, async () => {
     mongoose.connect(process.env.MONGO_DB_URL)

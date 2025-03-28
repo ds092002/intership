@@ -1,8 +1,6 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/user.model');
+const User = require('../model/socialMedia.model');
 require('dotenv').config();
-
-// Verify User Token
 exports.userVerifyToken = async (req, res, next) => {
     try {
         const authorization = req.headers['authorization'];
@@ -16,6 +14,11 @@ exports.userVerifyToken = async (req, res, next) => {
         }
 
         let decoded = jwt.verify(token, process.env.SECRET_KEY);
+
+        if (!decoded.userId) {
+            return res.status(401).json({ message: 'Invalid token: User ID missing' });
+        }
+
         let user = await User.findById(decoded.userId);
 
         if (!user) {
@@ -23,9 +26,14 @@ exports.userVerifyToken = async (req, res, next) => {
         }
 
         req.user = user;
+
+        // console.log("User Verified:", req.user); 
+
         next();
     } catch (error) {
         console.error('Token Verification Error:', error);
         res.status(403).json({ message: 'Invalid Token' });
     }
 };
+
+

@@ -1,0 +1,532 @@
+
+(1) => remove facebbok id add google id and remove google id and add facebook id
+const UserServices = require('../service/socialMedia.service');
+const userService = new UserServices();
+const bcryptjs = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+exports.socialMediaLogin = async (req, res) => {
+    try {
+        const { email, password, userName, facebook_id, google_id, photo, login_Type } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: "Email is required." });
+        }
+
+        let loginType = login_Type || (google_id ? "google" : facebook_id ? "facebook" : "normal");
+
+        let user = await userService.getUser({ email });
+
+        if (user) {
+            if (google_id && user.facebook_id) {
+                // ✅ Remove Facebook ID, set Google ID, and remove loginType
+                await userService.updateUser(user._id, { google_id, facebook_id: null, loginType: null });
+                return res.status(200).json({ message: "User is now registered with Google.", user });
+            } 
+            else if (facebook_id && user.google_id) {
+                // ✅ Remove Google ID, set Facebook ID, and remove loginType
+                await userService.updateUser(user._id, { facebook_id, google_id: null, loginType: null });
+                return res.status(200).json({ message: "User is now registered with Facebook." ,user});
+            } 
+            else if (google_id) {
+                if (user.google_id !== google_id) {
+                    return res.status(400).json({ message: "Google ID does not belong to this account. Please check your Google ID and email." });
+                }
+            } 
+            else if (facebook_id) {
+                if (user.facebook_id !== facebook_id) {
+                    return res.status(400).json({ message: "Facebook ID does not belong to this account. Please check your Facebook ID and email." });
+                }
+            } 
+            else {
+                if (!password) {
+                    return res.status(400).json({ message: "Password is required for login." });
+                }
+                let checkPassword = await bcryptjs.compare(password, user.password);
+                if (!checkPassword) {
+                    return res.status(400).json({ message: "Incorrect password. Please try again." });
+                }
+            }
+
+            let token = jwt.sign({ userId: user._id, loginType }, process.env.SECRET_KEY, { expiresIn: "7d" });
+
+            return res.status(200).json({
+                user: {
+                    _id: user._id,
+                    email: user.email,
+                    userName: user.userName,
+                    photo: user.photo,
+                    loginType,
+                    google_id: user.google_id,
+                    facebook_id: user.facebook_id
+                },
+                token,
+                message: `Login successful with ${loginType}`
+            });
+        }
+
+        if (!password && !google_id && !facebook_id) {
+            return res.status(400).json({ message: "Password is required for new users." });
+        }
+
+        const hashPassword = password ? await bcryptjs.hash(password, 10) : null;
+
+        let newUser = {
+            email,
+            userName: userName || email.split('@')[0],
+            password: hashPassword,
+            loginType,
+            photo,
+            google_id: google_id || null,
+            facebook_id: facebook_id || null
+        };
+
+        user = await userService.addNewUser(newUser);
+
+        return res.status(201).json({
+            user: {
+                _id: user._id,
+                email: user.email,
+                userName: user.userName,
+                loginType,
+                photo: user.photo,
+                google_id: user.google_id,
+                facebook_id: user.facebook_id
+            },
+            message: `User registered successfully with ${loginType}`
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: `Internal Server Error... ${error.message}` });
+    }
+};
+
+(2) successfully remove old i d and add new id
+const UserServices = require('../service/socialMedia.service');
+const userService = new UserServices();
+const bcryptjs = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+exports.socialMediaLogin = async (req, res) => {
+    try {
+        const { email, password, userName, facebook_id, google_id, photo, login_Type } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: "Email is required." });
+        }
+
+        let loginType = login_Type || (google_id ? "google" : facebook_id ? "facebook" : "normal");
+
+        let user = await userService.getUser({ email });
+
+        if (user) {
+            let updatedFields = {};
+            let message = "";
+
+            if (google_id) {
+                if (user.facebook_id) {
+                    // ✅ Remove Facebook ID when switching to Google
+                    updatedFields = { google_id, loginType: "google", facebook_id: null };
+                    message = "User is now registered with Google.";
+                } else if (user.google_id !== google_id) {
+                    return res.status(400).json({ message: "Google ID does not belong to this account. Please check your Google ID and email." });
+                } else {
+                    message = "Login successful with Google.";
+                }
+            } 
+            else if (facebook_id) {
+                if (user.google_id) {
+                    // ✅ Remove Google ID when switching to Facebook
+                    updatedFields = { facebook_id, loginType: "facebook", google_id: null };
+                    message = "User is now registered with Facebook.";
+                } else if (user.facebook_id !== facebook_id) {
+                    return res.status(400).json({ message: "Facebook ID does not belong to this account. Please check your Facebook ID and email." });
+                } else {
+                    message = "Login successful with Facebook.";
+                }
+            } 
+            else {
+                if (!password) {
+                    return res.status(400).json({ message: "Password is required for login." });
+                }
+                let checkPassword = await bcryptjs.compare(password, user.password);
+                if (!checkPassword) {
+                    return res.status(400).json({ message: "Incorrect password. Please try again." });
+                }
+                message = "Login successful.";
+            }
+
+            if (Object.keys(updatedFields).length > 0) {
+                await userService.updateUser(user._id, updatedFields);
+                user = await userService.getUser({ email }); // Fetch updated user data
+            }
+
+            let token = jwt.sign({ userId: user._id, loginType: user.loginType }, process.env.SECRET_KEY, { expiresIn: "7d" });
+
+            return res.status(200).json({
+                user: {
+                    _id: user._id,
+                    email: user.email,
+                    userName: user.userName,
+                    photo: user.photo,
+                    loginType: user.loginType,
+                    google_id: user.google_id || null,
+                    facebook_id: user.facebook_id || null
+                },
+                token,
+                message
+            });
+        }
+
+        // ✅ New User Registration
+        if (!password && !google_id && !facebook_id) {
+            return res.status(400).json({ message: "Password is required for new users." });
+        }
+
+        const hashPassword = password ? await bcryptjs.hash(password, 10) : null;
+
+        let newUser = {
+            email,
+            userName: userName || email.split('@')[0],
+            password: hashPassword,
+            loginType,
+            photo
+        };
+
+        let message = "User registered successfully";
+        if (google_id) {
+            newUser.google_id = google_id;
+            newUser.loginType = "google";
+            message = "User registered with Google.";
+        }
+        if (facebook_id) {
+            newUser.facebook_id = facebook_id;
+            newUser.loginType = "facebook";
+            message = "User registered with Facebook.";
+        }
+
+        user = await userService.addNewUser(newUser);
+
+        return res.status(201).json({
+            user: {
+                _id: user._id,
+                email: user.email,
+                userName: user.userName,
+                loginType: user.loginType,
+                photo: user.photo,
+                google_id: user.google_id || null,
+                facebook_id: user.facebook_id || null
+            },
+            message
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: `Internal Server Error... ${error.message}` });
+    }
+};
+
+
+
+now add some other functionlty i know when i impliment i don't know please you do that code was half one empty and unlogicalble but understand give correct and perfect code
+
+ex=
+
+first check email and email require condition then
+
+if(login_type === "normal" && password !== ""){
+    if(user.login_Type ===  ""){}
+    if(user-> email === email){
+        console.log("login succesfuly with logintype)
+    }else{
+        register new user
+    }
+}
+if(login_type === "google" && password !== ""){
+    if(user.login_Type ===  ""){}
+    if(user-> email === email){
+        console.log("login succesfuly with logintype)
+    }else{
+        register new user
+    }
+}
+if(login_type === "facebook" && password !== ""){
+    if(user.login_Type ===  ""){}
+    if(user-> email === email){
+        console.log("login succesfuly with logintype)
+    }else{
+        register new user
+    }
+}
+
+don't change the code old code was same but this functionlty yes if neccecry to remove so remove some part 
+
+(3) => 
+
+const UserServices = require('../service/socialMedia.service');
+const userService = new UserServices();
+const bcryptjs = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+exports.socialMediaLogin = async (req, res) => {
+    try {
+        const { email, password, userName, facebook_id, google_id, photo, login_Type } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: "Email is required." });
+        }
+
+        let loginType = login_Type || (google_id ? "google" : facebook_id ? "facebook" : "normal");
+
+        let user = await userService.getUser({ email });
+
+        if (user) {
+            let updatedFields = {};
+            let message = "";
+
+            if (loginType === "normal" && password) {
+                if (!user.password) {
+                    return res.status(400).json({ message: "No password set for this account. Try logging in with Google or Facebook." });
+                }
+                let checkPassword = await bcryptjs.compare(password, user.password);
+                if (!checkPassword) {
+                    return res.status(400).json({ message: "Incorrect password. Please try again." });
+                }
+                message = "Login successful with Normal.";
+            }
+
+            else if (loginType === "google") {
+                if (user.google_id) {
+                    if (user.google_id !== google_id) {
+                        return res.status(400).json({ message: "Google ID does not match this account." });
+                    }
+                    message = "Login successful with Google.";
+                } else {
+                    updatedFields = { google_id, facebook_id: null, loginType: "google" };
+                    message = "User is now registered with Google.";
+                }
+            }
+
+            else if (loginType === "facebook") {
+                if (user.facebook_id) {
+                    if (user.facebook_id !== facebook_id) {
+                        return res.status(400).json({ message: "Facebook ID does not match this account." });
+                    }
+                    message = "Login successful with Facebook.";
+                } else {
+                    updatedFields = { facebook_id, google_id: null, loginType: "facebook" };
+                    message = "User is now registered with Facebook.";
+                }
+            }
+
+            if (Object.keys(updatedFields).length > 0) {
+                await userService.updateUser(user._id, updatedFields);
+                user = await userService.getUser({ email });
+            }
+
+            let token = jwt.sign({ userId: user._id, loginType: user.loginType }, process.env.SECRET_KEY, { expiresIn: "7d" });
+
+            return res.status(200).json({
+                user: {
+                    _id: user._id,
+                    email: user.email,
+                    userName: user.userName,
+                    photo: user.photo,
+                    loginType: user.loginType,
+                    google_id: user.google_id || null,
+                    facebook_id: user.facebook_id || null
+                },
+                token,
+                message
+            });
+        }
+
+        if (!password && !google_id && !facebook_id) {
+            return res.status(400).json({ message: "Password is required for new users." });
+        }
+
+        const hashPassword = password ? await bcryptjs.hash(password, 10) : null;
+
+        let newUser = {
+            email,
+            userName: userName || email.split('@')[0],
+            password: hashPassword,
+            loginType,
+            photo
+        };
+
+        let message = "User registered successfully";
+        if (google_id) {
+            newUser.google_id = google_id;
+            newUser.loginType = "google";
+            message = "User registered with Google.";
+        }
+        if (facebook_id) {
+            newUser.facebook_id = facebook_id;
+            newUser.loginType = "facebook";
+            message = "User registered with Facebook.";
+        }
+
+        user = await userService.addNewUser(newUser);
+
+        return res.status(201).json({
+            user: {
+                _id: user._id,
+                email: user.email,
+                userName: user.userName,
+                loginType: user.loginType,
+                photo: user.photo,
+                google_id: user.google_id || null,
+                facebook_id: user.facebook_id || null
+            },
+            message
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: `Internal Server Error... ${error.message}` });
+    }
+};
+
+
+(4) =>
+const UserServices = require('../service/socialMedia.service');
+const userService = new UserServices();
+const bcryptjs = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+exports.socialMediaLogin = async (req, res) => {
+    try {
+        let { email, password, userName, facebook_id, google_id, photo, login_Type } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: "Email is required." });
+        }
+
+        let loginType = login_Type || (google_id ? "google" : facebook_id ? "facebook" : "normal");
+        let user = await userService.getUser({ email });
+
+        let updatedFields = {};
+        let message = "";
+
+        if (user) {
+            if (
+                (loginType === "google" && user.facebook_id) ||
+                (loginType === "facebook" && user.google_id) ||
+                (loginType === "normal" && (user.google_id || user.facebook_id))
+            ) {
+                return res.status(400).json({ message: "This email is already registered with a different login method. Please use the correct login method." });
+            }
+
+            if (loginType === "normal") {
+                if (!password) {
+                    return res.status(400).json({ message: "Password is required for login." });
+                }
+                const checkPassword = await bcryptjs.compare(password, user.password);
+                if (!checkPassword) {
+                    return res.status(400).json({ message: "Incorrect password. Please try again." });
+                }
+                message = "Login successful with normal.";
+            } else if (loginType === "google") {
+                if (user.google_id) {
+                    if (user.google_id !== google_id) {
+                        return res.status(400).json({ message: "Google ID does not match this account." });
+                    }
+                    message = "Login successful with Google.";
+                } else {
+                    updatedFields = { google_id, facebook_id: null, loginType: "google" };
+                    message = "User is now registered with Google.";
+                }
+            } else if (loginType === "facebook") {
+                if (user.facebook_id) {
+                    if (user.facebook_id !== facebook_id) {
+                        return res.status(400).json({ message: "Facebook ID does not match this account." });
+                    }
+                    message = "Login successful with Facebook.";
+                } else {
+                    updatedFields = { facebook_id, google_id: null, loginType: "facebook" };
+                    message = "User is now registered with Facebook.";
+                }
+            }
+
+            if (login_Type === "google" || login_Type === "facebook") {
+                if (!password) {
+                    password = user?.password || null;
+                }
+            }
+
+            if (Object.keys(updatedFields).length > 0) {
+                await userService.updateUser(user._id, updatedFields);
+                Object.assign(user, updatedFields);
+                return res.status(200).json({
+                    user: {
+                        _id: user._id,
+                        email: user.email,
+                        userName: user.userName,
+                        photo: user.photo,
+                        loginType,
+                        google_id: user.google_id,
+                        facebook_id: user.facebook_id
+                    },
+                    message
+                });
+            }
+
+            const token = jwt.sign({ userId: user._id, loginType }, process.env.SECRET_KEY);
+            return res.status(200).json({
+                user: {
+                    _id: user._id,
+                    email: user.email,
+                    userName: user.userName,
+                    photo: user.photo,
+                    loginType,
+                    google_id: user.google_id,
+                    facebook_id: user.facebook_id
+                },
+                token,
+                message
+            });
+        }
+
+        if (!password) {
+            return res.status(400).json({ message: "Password is required for new users." });
+        }
+
+        const hashPassword = await bcryptjs.hash(password, 10);
+        let newUser = {
+            email,
+            userName: userName || email.split('@')[0],
+            password: hashPassword,
+            loginType,
+            photo,
+            google_id: google_id || null,
+            facebook_id: facebook_id || null
+        };
+
+        user = await userService.addNewUser(newUser);
+
+        return res.status(201).json({
+            user: {
+                _id: user._id,
+                email: user.email,
+                userName: user.userName,
+                loginType,
+                photo: user.photo,
+                google_id: user.google_id,
+                facebook_id: user.facebook_id
+            },
+            message: `User registered successfully with ${loginType}`
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: `Internal Server Error... ${error.message}` });
+    }
+};
+
+

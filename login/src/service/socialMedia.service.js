@@ -17,4 +17,13 @@ module.exports = class socialMedialService {
             return error;
         }
     }
+
+    async updateUser(id, body) {
+        try {
+            return await SocialMedia.findByIdAndUpdate(id, {$set: body}, {new: true});
+        } catch (error) {
+            console.log(error);
+            return error;
+        }
+    }
 }
