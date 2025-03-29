@@ -5,31 +5,44 @@ const cartSchema = mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Social-Media",
-      required: true,
+      default: null,
     },
-    userName: {
-      type: String, 
-    },
-    email: {
+    ipAddress: {
       type: String,
+      default: null,
     },
     cartItem: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "products",
       required: true,
     },
-    productName: {
-      type: String,
+    productName: { 
+      type: String, 
+      required: true 
     },
-    price: {
+    price: { 
+      type: Number, 
+      required: true 
+    },
+    description: { 
+      type: String, 
+      required: true 
+    },
+    totalPrice:{
       type: Number,
-    },
-    description: {
-      type: String,
+      require: true
     },
     quantity: {
       type: Number,
       default: 1,
+    },
+    userName: {
+      type: String,
+      default: null,
+    },
+    email: {
+      type: String,
+      default: null,
     },
     isDelete: {
       type: Boolean,

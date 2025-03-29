@@ -262,7 +262,7 @@ if(login_type === "facebook" && password !== ""){
     }
 }
 
-don't change the code old code was same but this functionlty yes if neccecry to remove so remove some part 
+\end{code}
 
 (3) => 
 
@@ -530,3 +530,331 @@ exports.socialMediaLogin = async (req, res) => {
 };
 
 
+
+
+
+auth
+const jwt = require("jsonwebtoken");
+const UserModel = require("../model/socialMedia.model");
+
+const authMiddleware = async (req, res, next) => {
+  try {
+    let token = req.cookies.token || req.header("Authorization")?.replace("Bearer ", "");
+
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized: No token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await UserModel.findById(decoded.id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized: Invalid token" });
+    }
+
+    req.user = user; // Attach user to request
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Unauthorized: Invalid token" });
+  }
+};
+
+module.exports = authMiddleware;
+
+
+Guest Mode add to cart api
+
+const UserModel = require("../model/socialMedia.model");
+const ProductModel = require("../model/product.model");
+const CartModel = require("../model/cart.model");
+
+// Helper function to get guest cart from cookies
+const getGuestCart = (req) => {
+  return req.cookies.cart ? JSON.parse(req.cookies.cart) : [];
+};
+
+// Helper function to save guest cart to cookies
+const saveGuestCart = (res, cart) => {
+  res.cookie("cart", JSON.stringify(cart), { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 }); // 7 days
+};
+
+// Add to Cart Functionality for both Guest & Logged-in Users
+exports.addToCart = async (req, res) => {
+  try {
+    const { cartItem, quantity = 1 } = req.body;
+
+    if (!cartItem) {
+      return res.status(400).json({ message: "Product (cartItem) is required" });
+    }
+
+    // Fetch product details
+    const product = await ProductModel.findById(cartItem);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // ✅ If user is logged in → store cart in DB
+    if (req.user && req.user._id) {
+      const userId = req.user._id;
+
+      let cart = await CartModel.findOne({ user: userId, cartItem, isDelete: false });
+
+      if (cart) {
+        cart.quantity += quantity;
+        await cart.save();
+        return res.status(200).json({ message: `Cart updated: Quantity increased`, cart });
+      }
+
+      cart = new CartModel({
+        user: userId,
+        cartItem: product._id,
+        productName: product.name,
+        price: product.price,
+        description: product.description,
+        quantity,
+      });
+
+      await cart.save();
+      return res.status(201).json({ message: `Item added to cart successfully`, cart });
+    }
+
+    // ✅ If user is **not logged in** (Guest) → store cart in cookies
+    let guestCart = getGuestCart(req);
+
+    let existingItem = guestCart.find((item) => item.cartItem === cartItem);
+    if (existingItem) {
+      existingItem.quantity += quantity;
+    } else {
+      guestCart.push({
+        cartItem: product._id,
+        productName: product.name,
+        price: product.price,
+        description: product.description,
+        quantity,
+      });
+    }
+
+    saveGuestCart(res, guestCart);
+
+    return res.status(201).json({ message: `Item added to guest cart successfully`, guestCart });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: `Internal Server Error... ${error.message}` });
+  }
+};
+
+exports.mergeCartAfterLogin = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "Unauthorized: User not found" });
+    }
+
+    const userId = req.user._id;
+    let guestCart = getGuestCart(req);
+
+    for (let item of guestCart) {
+      let existingCartItem = await CartModel.findOne({ user: userId, cartItem: item.cartItem });
+
+      if (existingCartItem) {
+        existingCartItem.quantity += item.quantity;
+        await existingCartItem.save();
+      } else {
+        await CartModel.create({
+          user: userId,
+          cartItem: item.cartItem,
+          productName: item.productName,
+          price: item.price,
+          description: item.description,
+          quantity: item.quantity,
+        });
+      }
+    }
+
+    res.clearCookie("cart"); // Remove guest cart after merging
+    return res.status(200).json({ message: "Guest cart merged with user cart" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: `Internal Server Error... ${error.message}` });
+  }
+};
+
+exports.getCart = async (req, res) => {
+  try {
+    if (req.user && req.user._id) {
+      const userId = req.user._id;
+      const cart = await CartModel.find({ user: userId, isDelete: false }).populate("cartItem");
+      return res.status(200).json({ cart });
+    }
+
+    const guestCart = getGuestCart(req);
+    return res.status(200).json({ guestCart });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: `Internal Server Error... ${error.message}` });
+  }
+};
+
+exports.clearGuestCart = (req, res) => {
+  res.clearCookie("cart");
+  return res.status(200).json({ message: "Guest cart cleared successfully" });
+};
+
+
+const express = require("express");
+const router = express.Router();
+const cartController = require("../controller/cart.controller");
+const authMiddleware = require("../middleware/authMiddleware"); // For user authentication
+
+router.post("/add", cartController.addToCart);
+router.get("/get", cartController.getCart);
+router.post("/merge", authMiddleware, cartController.mergeCartAfterLogin);
+router.delete("/clear-guest", cartController.clearGuestCart);
+
+module.exports = router;
+
+
+==>  with cookie store guestid cart and loger user cart
+
+const jwt = require("jsonwebtoken");
+const CartModel = require("../model/cart.model");
+const UserModel = require("../model/socialMedia.model");
+const ProductModel = require("../model/product.model");
+const { v4: uuidv4 } = require("uuid");
+require("dotenv").config();
+
+exports.addToCart = async (req, res) => {
+    try {
+        const { quantity = 1, cartItem } = req.body;
+
+        let userId = null;
+        let isGuest = false;
+
+        req.cookies = req.cookies || {};
+
+        const authorization = req.headers["authorization"];
+        if (authorization && authorization.startsWith("Bearer ")) {
+            const token = authorization.split(" ")[1];
+            try {
+                const decoded = jwt.verify(token, process.env.SECRET_KEY);
+                userId = decoded.userId;
+            } catch (err) {
+                return res.status(401).json({ message: "Unauthorized: Invalid token" });
+            }
+        }
+
+        let guestId = null;
+        if (!userId) {
+            isGuest = true;
+            guestId = req.cookies.guestId || uuidv4();
+            res.cookie("guestId", guestId, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
+        }
+
+        const product = await ProductModel.findById(cartItem).select("name price description");
+        if (!product) {
+            return res.status(404).json({ message: "Product not found" });
+        }
+
+        let userDetails = null;
+        if (!isGuest) {
+            userDetails = await UserModel.findById(userId).select("userName email");
+        }
+
+        let cart = await CartModel.findOne({
+            $or: [{ user: userId }, { guestId: guestId }],
+            cartItem: cartItem,
+            isDelete: false
+        });
+
+        if (cart) {
+          cart.quantity += quantity;
+          cart.totalPrice = cart.quantity * product.price;
+          await cart.save();
+          return res.status(200).json({ message: `Cart updated: Quantity increased`, cart });
+      }
+
+      let totalPrice = product.price * quantity;
+
+        cart = new CartModel({
+            user: isGuest ? null : userId,
+            guestId: isGuest ? guestId : null,
+            cartItem: product._id,
+            productName: product.name,      
+            price: product.price,           
+            description: product.description,
+            quantity: quantity,
+            totalPrice: totalPrice,
+            userName: userDetails ? userDetails.userName : "Guest",
+            email: userDetails ? userDetails.email : null,
+        });
+
+        await cart.save();
+
+        return res.status(201).json({
+            message: "Item added to cart successfully",
+            cart
+        });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    }
+};
+
+model
+const mongoose = require("mongoose");
+
+const cartSchema = mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Social-Media",
+      default: null,
+    },
+    guestId: {
+      type: String,
+      default: null,
+    },
+    cartItem: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "products",
+      required: true,
+    },
+    productName: { 
+      type: String, 
+      required: true 
+    },
+    price: { 
+      type: Number, 
+      required: true 
+    },
+    description: { 
+      type: String, 
+      required: true 
+    },
+    totalPrice:{
+      type: Number,
+      require: true
+    },
+    quantity: {
+      type: Number,
+      default: 1,
+    },
+    userName: {
+      type: String,
+      default: null,
+    },
+    email: {
+      type: String,
+      default: null,
+    },
+    isDelete: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    versionKey: false,
+    timestamps: true,
+  }
+);
+
+module.exports = mongoose.model("cart", cartSchema);

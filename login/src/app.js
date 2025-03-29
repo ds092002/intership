@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+const cookieParser = require("cookie-parser");
 const userRoutes = require('./routes/index.routes');
 
 dotenv.config();
@@ -11,6 +12,7 @@ const port = process.env.PORT || 5000;
 
 app.use(express.json());
 app.use(morgan('dev'));
+app.use(cookieParser()); 
 
 app.use('/api', userRoutes);
 
