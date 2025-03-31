@@ -2,11 +2,11 @@ const express = require("express");
 const cartRoutes = express.Router();
 const { 
     addToCart,
-    mergeGuestCart
+    listingCart
 } = require("../controller/cart.controller");
 const { userVerifyToken } = require("../helpers/userVerifyToken");
 
 cartRoutes.post('/addToCart', addToCart);
-cartRoutes.post('/mergeGuestCart', userVerifyToken, mergeGuestCart);
+cartRoutes.get('/listingCart', listingCart);
 
-module.exports = cartRoutes;
+module.exports = cartRoutes; 

@@ -7,7 +7,6 @@ require("dotenv").config();
 exports.addToCart = async (req, res) => {
     try {
         const { quantity = 1, cartItem, ipAddress } = req.body;
-
         let userId = null;
 
         const authorization = req.headers["authorization"];
@@ -26,7 +25,6 @@ exports.addToCart = async (req, res) => {
         }
 
         const product = await ProductModel.findById(cartItem).select("name price description");
-        console.log(cartItem)
         if (!product) {
             return res.status(404).json({ message: "Product not found" });
         }
@@ -36,39 +34,48 @@ exports.addToCart = async (req, res) => {
             userDetails = await UserModel.findById(userId).select("userName email");
         }
 
-        let cart = await CartModel.findOne({
-            $or: [{ user: userId }, { ipAddress: userId ? null : ipAddress }],
-            cartItem: cartItem,
-            isDelete: false
-        });
+        const updatedCart = await CartModel.findOneAndUpdate(
+            {
+                cartItem: cartItem,
+                isDelete: false,
+                $or: [
+                    { user: userId, user: { $ne: null } },
+                    { ipAddress: ipAddress, user: null } 
+                ]
+            },
+            {
+                $inc: { quantity: quantity, totalPrice: quantity * product.price },
+                $set: { user: userId || null }
+            },
+            { new: true }
+        );
 
-        if (cart) {
-            cart.quantity += quantity;
-            cart.totalPrice = cart.quantity * product.price;
-            await cart.save();
-            return res.status(200).json({ message: `Cart updated: Quantity increased`, cart });
+        if (!updatedCart) {
+            const newCart = new CartModel({
+                user: userId || null,
+                ipAddress: userId ? null : ipAddress,
+                cartItem: product._id,
+                productName: product.name,
+                price: product.price,
+                description: product.description,
+                quantity: quantity,
+                totalPrice: product.price * quantity,
+                userName: userDetails ? userDetails.userName : "Guest",
+                email: userDetails ? userDetails.email : null,
+            });
+
+            await newCart.save();
         }
 
-        let totalPrice = product.price * quantity;
-
-        cart = new CartModel({
-            userId: userId || null,
-            ipAddress: userId ? null : ipAddress,
-            cartItem: product._id,
-            productName: product.name,      
-            price: product.price,           
-            description: product.description,
-            quantity: quantity,
-            totalPrice: totalPrice,
-            userName: userDetails ? userDetails.userName : "Guest",
-            email: userDetails ? userDetails.email : null,
+        const cartItems = await CartModel.find({
+            isDelete: false,
+            ...(userId ? { user: userId } : { ipAddress: ipAddress })
         });
 
-        await cart.save();
-
-        return res.status(201).json({
-            message: "Item added to cart successfully",
-            cart
+        return res.status(200).json({
+            message: updatedCart ? "Cart updated: Quantity increased" : "Item added to cart successfully",
+            userId: userId,
+            cart: cartItems
         });
     } catch (error) {
         console.log(error);
@@ -76,56 +83,46 @@ exports.addToCart = async (req, res) => {
     }
 };
 
-exports.mergeGuestCart = async (req, res) => {
+exports.listingCart = async (req, res) => {
     try {
-        console.log("Request user:", req.user); 
+        let userId = null;
+        let ipAddress = req.body.ipAddress;
 
-        if (!req.user || !req.user._id) {  
-            return res.status(401).json({ message: "Unauthorized: User not found" });
-        }
-
-        const { _id: userId, userName, email } = req.user;
-        const { ipAddress } = req.body;
-
-        console.log("User ID:", userId);
-        console.log("User Name:", userName);
-        console.log("IP Address:", ipAddress);
-
-        if (!ipAddress) {
-            return res.status(400).json({ message: "IP address is required" });
-        }
-
-        const guestCartItems = await CartModel.find({ ipAddress, isDelete: false });
-
-        if (guestCartItems.length === 0) {
-            return res.status(200).json({ message: "No guest cart found" });
-        }
-
-        for (let guestItem of guestCartItems) {
-            const existingCartItem = await CartModel.findOne({
-                userId: userId,
-                cartItem: guestItem.cartItem,
-                isDelete: false
-            });
-
-            if (existingCartItem) {
-                existingCartItem.quantity += guestItem.quantity;
-                existingCartItem.totalPrice = existingCartItem.quantity * existingCartItem.price;
-                await existingCartItem.save();
-            } else {
-                guestItem.userId = userId;
-                guestItem.userName = userName;  
-                guestItem.email = email;        
-                guestItem.ipAddress = null;
-                await guestItem.save();
+        const authorization = req.headers["authorization"];
+        if (authorization && authorization.startsWith("Bearer ")) {
+            const token = authorization.split(" ")[1];
+            try {
+                const decoded = jwt.verify(token, process.env.SECRET_KEY);
+                userId = decoded.userId;
+                console.log("User ID from token:", userId);
+            } catch (error) {
+                return res.status(401).json({ message: "Unauthorized: Invalid token" });
             }
         }
 
-        await CartModel.deleteMany({ ipAddress });
+        if (!userId && !ipAddress) {
+            return res.status(400).json({ message: "User ID or IP address is required" });
+        }
+        
 
-        return res.status(200).json({ message: "No items left behind! Your guest cart is now linked to your account." });
-    } catch (error) { 
-        console.error(error);
-        res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+        console.log(userId);
+        console.log(ipAddress);
+    
+        
+        const cartItems = await CartModel.find({
+            isDelete: false,
+            $or: [
+                { user: userId },
+                { ipAddress: ipAddress } 
+            ]
+        }).populate("cartItem", "name price description");
+
+        return res.status(200).json({
+            message: "Cart items fetched successfully",
+            cart: cartItems
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ message: `Internal server error: ${error.message}` });
     }
 };

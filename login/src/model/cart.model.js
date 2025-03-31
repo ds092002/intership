@@ -30,7 +30,7 @@ const cartSchema = mongoose.Schema(
     },
     totalPrice:{
       type: Number,
-      require: true
+      required: true
     },
     quantity: {
       type: Number,
