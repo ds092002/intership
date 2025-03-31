@@ -20,26 +20,23 @@ exports.userVerifyToken = async (req, res, next) => {
         try {
             decoded = jwt.verify(token, process.env.SECRET_KEY);
         } catch (err) {
-            if (err.name === "TokenExpiredError") {
-                return res.status(401).json({ message: "Unauthorized: Token expired" });
-            } else {
-                return res.status(403).json({ message: "Invalid Token" });
-            }
+            console.error("JWT Verification Error:", err);
+            return res.status(403).json({ message: "Invalid Token" });
         }
-
+        
         if (!decoded.userId) {
             return res.status(401).json({ message: "Invalid token: User ID missing" });
         }
 
-        let user = await User.findById(decoded.userId).select("-password"); // Exclude password
+        let user = await User.findById(decoded.userId).select("userName email");
 
         if (!user) {
             return res.status(401).json({ message: "Invalid User Token" });
         }
 
-        req.user = user; // Attach user to request object
+        req.user = { _id: user._id.toString(), userName: user.userName, email: user.email }; // Attach full user details
 
-        next(); // Move to the next middleware
+        next();
     } catch (error) {
         console.error("Token Verification Error:", error);
         res.status(500).json({ message: "Internal Server Error" });
