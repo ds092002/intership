@@ -34,23 +34,23 @@ exports.addToCart = async (req, res) => {
             userDetails = await UserModel.findById(userId).select("userName email");
         }
 
-        const updatedCart = await CartModel.findOneAndUpdate(
-            {
-                cartItem: cartItem,
-                isDelete: false,
-                $or: [
-                    { user: userId, user: { $ne: null } },
-                    { ipAddress: ipAddress, user: null } 
-                ]
-            },
-            {
-                $inc: { quantity: quantity, totalPrice: quantity * product.price },
-                $set: { user: userId || null }
-            },
-            { new: true }
-        );
+        const existingCart = await CartModel.findOne({
+            cartItem: cartItem,
+            isDelete: false,
+            ...(userId ? { user: userId } : { ipAddress: ipAddress })
+        }); 
 
-        if (!updatedCart) {
+        if (existingCart) {
+            existingCart.quantity += quantity;
+            existingCart.totalPrice = existingCart.quantity * product.price;
+            await existingCart.save();
+ 
+            return res.status(200).json({
+                message: "Cart updated: Quantity increased",
+                userId: userId,
+                cart: existingCart
+            });
+        } else {
             const newCart = new CartModel({
                 user: userId || null,
                 ipAddress: userId ? null : ipAddress,
@@ -65,18 +65,13 @@ exports.addToCart = async (req, res) => {
             });
 
             await newCart.save();
+
+            return res.status(201).json({
+                message: "Item added to cart successfully",
+                userId: userId,
+                cart: newCart
+            });
         }
-
-        const cartItems = await CartModel.find({
-            isDelete: false,
-            ...(userId ? { user: userId } : { ipAddress: ipAddress })
-        });
-
-        return res.status(200).json({
-            message: updatedCart ? "Cart updated: Quantity increased" : "Item added to cart successfully",
-            userId: userId,
-            cart: cartItems
-        });
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: `Internal Server Error: ${error.message}` });
@@ -94,7 +89,7 @@ exports.listingCart = async (req, res) => {
             try {
                 const decoded = jwt.verify(token, process.env.SECRET_KEY);
                 userId = decoded.userId;
-                console.log("User ID from token:", userId);
+                // console.log("User ID from token:", userId);
             } catch (error) {
                 return res.status(401).json({ message: "Unauthorized: Invalid token" });
             }
@@ -104,11 +99,9 @@ exports.listingCart = async (req, res) => {
             return res.status(400).json({ message: "User ID or IP address is required" });
         }
         
-
-        console.log(userId);
-        console.log(ipAddress);
+        // console.log(userId);
+        // console.log(ipAddress);
     
-        
         const cartItems = await CartModel.find({
             isDelete: false,
             $or: [
@@ -117,6 +110,7 @@ exports.listingCart = async (req, res) => {
             ]
         }).populate("cartItem", "name price description");
 
+        console.log(cartItems);
         return res.status(200).json({
             message: "Cart items fetched successfully",
             cart: cartItems
