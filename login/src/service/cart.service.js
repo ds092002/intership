@@ -1,6 +1,5 @@
 const CartModel = require("../model/cart.model");
 const UserModel = require("../model/socialMedia.model");
-const ProductModel = require('../model/product.model')
 
 module.exports = class CartServices {
 
