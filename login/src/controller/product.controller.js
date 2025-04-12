@@ -20,9 +20,9 @@ exports.updateProduct = async (req, res) => {
     try {
         let product = await productServices.getProductById(req.query.productId);
         if (!product) {
-            res.sta(404).json({message: `Product not found`});
+            res.status(404).json({message: `Product not found`});
         }
-        product = await productServices.updateProduct(product._id,{...req.body});
+        product = await productServices.updateProduct(product?._id, { ...req.body });
         res.status(202).json({product, message: `Product has been updated successfully...`});
     } catch (error) {
         console.log(error);
